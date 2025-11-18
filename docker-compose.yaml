@@ -11,10 +11,10 @@ services:
     build: .
     ports:
       - "3000:3000"
+    env_file: .env
     environment:
       - G4F_UPSTREAM_URL=http://g4f:8080
       - ROUTER_PORT=3000
-      - ROUTER_API_KEY=sua_chave_secreta_aqui
       - HEALTH_CHECK_INTERVAL_MS=300000
     depends_on:
       - g4f

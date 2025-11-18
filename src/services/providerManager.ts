@@ -116,9 +116,14 @@ class ProviderManager {
     let providerList = this.modelToProvidersMap[modelName];
 
     if (!providerList) {
-      const matchingKey = Object.keys(this.modelToProvidersMap).find(
-        (key) => modelName.startsWith(key) && key !== 'default'
+      const sortedKeys = Object.keys(this.modelToProvidersMap)
+        .filter((key) => key !== 'default')
+        .sort((a, b) => b.length - a.length);
+
+      const matchingKey = sortedKeys.find(
+        (key) => modelName.startsWith(key)
       );
+
       if (matchingKey) {
         console.log(
           `[MANAGER] Partial match found: "${modelName}" will use map for "${matchingKey}".`
