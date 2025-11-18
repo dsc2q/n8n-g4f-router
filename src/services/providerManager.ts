@@ -112,13 +112,17 @@ class ProviderManager {
     }
   }
 
-  public getHealthyProviderForModel(modelName: string): Provider | undefined {
+  private _getProviderNamesForModel(modelName: string): string[] {
     let providerList = this.modelToProvidersMap[modelName];
 
     if (!providerList) {
-      const matchingKey = Object.keys(this.modelToProvidersMap).find(key => modelName.startsWith(key) && key !== 'default');
+      const matchingKey = Object.keys(this.modelToProvidersMap).find(
+        (key) => modelName.startsWith(key) && key !== 'default'
+      );
       if (matchingKey) {
-        console.log(`[MANAGER] Partial match found: "${modelName}" will use map for "${matchingKey}".`);
+        console.log(
+          `[MANAGER] Partial match found: "${modelName}" will use map for "${matchingKey}".`
+        );
         providerList = this.modelToProvidersMap[matchingKey];
       }
     }
@@ -130,8 +134,22 @@ class ProviderManager {
       providerList = this.modelToProvidersMap['default'];
     }
 
+    return providerList || [];
+  }
+
+  public getProvider(name: string): Provider | undefined {
+    return this.providers.get(name);
+  }
+
+  public getProviderNamesForModel(modelName: string): string[] {
+    return this._getProviderNamesForModel(modelName);
+  }
+
+  public getHealthyProviderForModel(modelName: string): Provider | undefined {
+    const providerList = this._getProviderNamesForModel(modelName);
+
     for (const providerName of providerList) {
-      const provider = this.providers.get(providerName);
+      const provider = this.getProvider(providerName);
       if (provider && provider.healthy) {
         console.log(
           `[MANAGER] Found healthy provider "${providerName}" for model "${modelName}".`
