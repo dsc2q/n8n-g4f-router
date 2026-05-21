@@ -1,0 +1,37 @@
+{
+  "name": "n8n-g4f-router",
+  "version": "2.0.0",
+  "description": "A smart, auto-failover routing proxy connecting n8n to gpt4free (g4f) with OpenAI-compatible API",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "ts-node src/server.ts",
+    "lint": "tsc --noEmit"
+  },
+  "keywords": [
+    "n8n",
+    "gpt4free",
+    "g4f",
+    "openai",
+    "proxy",
+    "router",
+    "llm",
+    "ai"
+  ],
+  "author": "dsc2q",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.7.9",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.7",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3"
+  }
+}

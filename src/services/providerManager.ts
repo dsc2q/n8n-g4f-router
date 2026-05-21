@@ -5,180 +5,248 @@ interface Provider {
   name: string;
   healthy: boolean;
   lastCheck: number;
+  failureCount: number;
 }
 
 class ProviderManager {
   private apiClient: AxiosInstance;
   private providers: Map<string, Provider> = new Map();
 
+  /**
+   * Full list of g4f providers to health-check.
+   * Updated for g4f 2025/2026 — only providers that are stable and active.
+   */
   private allProviderNames: string[] = [
+    'Blackbox',
+    'DeepInfra',
+    'DDG',
+    'FreeGpt',
     'Gemini',
-    'Gpt4freePro',
     'Groq',
     'HuggingFace',
-    'Nvidia',
     'Ollama',
     'OpenRouter',
-    'DeepInfra',
-    'Anondrop',
-    'Airforce',
-    'MetaAI',
-    'Phind',
-    'You',
-    'Bing',
-    'Pi',
-    'GeekGpt',
-    'Liaobots',
-    'Raycast',
+    'PerplexityLabs',
+    'Pizzagpt',
     'Pollinations',
+    'PollinationsAI',
+    'You',
   ];
 
+  /**
+   * Maps OpenAI-compatible model names to the g4f providers that support them.
+   * Providers are ordered by preference (first = highest priority).
+   * Updated for 2025/2026 with current model names.
+   */
   private modelToProvidersMap: Record<string, string[]> = {
-    'gpt-5-nano': ['Gpt4freePro', 'OpenRouter', 'Liaobots'],
-    'gpt-5-mini': ['Gpt4freePro', 'OpenRouter', 'Liaobots'],
-    'gpt-5-chat': ['Gpt4freePro', 'OpenRouter', 'Liaobots'],
-    'grok-4': ['Gpt4freePro', 'OpenRouter'],
-    'grok-3-mini': ['Gpt4freePro', 'OpenRouter'],
-    'deepseek-v3': ['Gpt4freePro', 'DeepInfra', 'OpenRouter'],
-    'mistral-small-3.1-24b': ['Gpt4freePro', 'DeepInfra', 'OpenRouter'],
-    'gemini-2.5-flash-lite': ['Gemini', 'Gpt4freePro'],
-    'gpt-4': ['Bing', 'Gpt4freePro', 'You', 'Phind', 'GeekGpt', 'Liaobots', 'Raycast'],
-    'gpt-4o': ['Gpt4freePro', 'OpenRouter'],
-    'gpt-4-turbo': ['Bing', 'Gpt4freePro', 'OpenRouter'],
-    'gpt-3.5-turbo': ['Gpt4freePro', 'ChatBase', 'DeepInfra', 'GeekGpt', 'Liaobots'],
-    'llama-3-70b': ['Groq', 'MetaAI', 'OpenRouter'],
-    'llama-3-8b': ['Groq', 'MetaAI', 'HuggingFace'],
-    'gemini-pro': ['Gemini'],
-    'mixtral-8x7b': ['Groq', 'HuggingFace'],
-    'pi': ['Pi'],
-    'default': ['Gpt4freePro', 'MetaAI', 'Phind', 'Groq', 'Gemini', 'Pollinations'],
+    // GPT-4o family
+    'gpt-4o': ['Blackbox', 'OpenRouter', 'DDG'],
+    'gpt-4o-mini': ['Blackbox', 'DDG', 'OpenRouter', 'Pollinations'],
+
+    // GPT-4 family
+    'gpt-4': ['Blackbox', 'OpenRouter', 'You'],
+    'gpt-4-turbo': ['Blackbox', 'OpenRouter'],
+
+    // GPT-3.5
+    'gpt-3.5-turbo': ['Blackbox', 'DDG', 'FreeGpt', 'Pizzagpt', 'OpenRouter'],
+
+    // Gemini family
+    'gemini-1.5-flash': ['Gemini', 'Pollinations'],
+    'gemini-1.5-pro': ['Gemini'],
+    'gemini-2.0-flash': ['Gemini', 'PollinationsAI'],
+    'gemini-2.5-flash': ['Gemini'],
+
+    // Claude family
+    'claude-3-haiku': ['OpenRouter', 'DDG'],
+    'claude-3-sonnet': ['OpenRouter'],
+    'claude-3-opus': ['OpenRouter'],
+    'claude-3-5-sonnet': ['OpenRouter'],
+    'claude-3-7-sonnet': ['OpenRouter'],
+
+    // Llama family
+    'llama-3.1-8b': ['Groq', 'HuggingFace', 'OpenRouter', 'PerplexityLabs'],
+    'llama-3.1-70b': ['Groq', 'OpenRouter', 'PerplexityLabs'],
+    'llama-3.3-70b': ['Groq', 'OpenRouter'],
+    'llama-3-8b': ['Groq', 'HuggingFace'],
+    'llama-3-70b': ['Groq', 'OpenRouter'],
+
+    // DeepSeek family
+    'deepseek-v3': ['DeepInfra', 'OpenRouter', 'Blackbox'],
+    'deepseek-r1': ['DeepInfra', 'OpenRouter', 'Blackbox'],
+    'deepseek-chat': ['DeepInfra', 'OpenRouter'],
+
+    // Mistral family
+    'mixtral-8x7b': ['Groq', 'HuggingFace', 'DeepInfra'],
+    'mistral-7b': ['HuggingFace', 'DeepInfra', 'OpenRouter'],
+    'mistral-small': ['DeepInfra', 'OpenRouter'],
+
+    // Qwen family
+    'qwen-2.5-72b': ['HuggingFace', 'OpenRouter'],
+    'qwen-2-72b': ['HuggingFace', 'OpenRouter'],
+
+    // Blackbox specific
+    'blackboxai': ['Blackbox'],
+    'blackboxai-pro': ['Blackbox'],
+
+    // Local / Ollama
+    'ollama': ['Ollama'],
+
+    // Default fallback for unknown models
+    'default': ['Blackbox', 'DDG', 'OpenRouter', 'Pollinations', 'Groq', 'Gemini'],
   };
 
   constructor() {
     this.apiClient = axios.create({
       baseURL: config.g4fUpstreamUrl,
-      timeout: 10000,
+      timeout: 15000,
     });
 
+    // Initialize all providers as unhealthy (will be updated by health checks)
     this.allProviderNames.forEach((name) => {
       this.providers.set(name, {
         name,
         healthy: false,
         lastCheck: 0,
+        failureCount: 0,
       });
     });
   }
 
-  public startHealthChecks() {
+  /**
+   * Starts the periodic health check loop.
+   * Runs immediately on startup, then on the configured interval.
+   */
+  public startHealthChecks(): void {
     console.log('[MANAGER] Starting initial health checks...');
     this.runAllHealthChecks();
 
     setInterval(
       () => this.runAllHealthChecks(),
-      config.healthCheckInterval
+      config.healthCheckIntervalMs
     );
   }
 
-  private async runAllHealthChecks() {
-    console.log('[MANAGER] Running periodic health checks...');
+  /**
+   * Runs health checks for all registered providers in parallel.
+   */
+  private async runAllHealthChecks(): Promise<void> {
+    console.log(`[MANAGER] Running health checks for ${this.allProviderNames.length} providers...`);
+
     const checks = this.allProviderNames.map((name) =>
-      this.checkProvider(name)
+      this.checkProviderHealth(name)
     );
+
     await Promise.allSettled(checks);
+
+    const healthy = [...this.providers.values()].filter((p) => p.healthy);
+    console.log(
+      `[MANAGER] Health check complete: ${healthy.length}/${this.allProviderNames.length} providers healthy.`
+    );
+    if (healthy.length > 0) {
+      console.log(`[MANAGER] Healthy: ${healthy.map((p) => p.name).join(', ')}`);
+    }
   }
 
-  private async checkProvider(name: string) {
-    const provider = this.providers.get(name)!;
-    try {
-      const testPayload = {
-        model: name,
-        messages: [{ role: 'user', content: 'Hello' }],
-        stream: false,
-      };
+  /**
+   * Health-checks a single provider by querying the g4f /v1/models endpoint.
+   * Using /v1/models is cheap — no token generation needed.
+   */
+  private async checkProviderHealth(providerName: string): Promise<void> {
+    const provider = this.providers.get(providerName);
+    if (!provider) return;
 
-      await this.apiClient.post('/v1/chat/completions', testPayload);
+    try {
+      // Try GET /v1/models first (cheapest check)
+      await this.apiClient.get('/v1/models', {
+        params: { provider: providerName },
+        timeout: 10000,
+      });
 
       if (!provider.healthy) {
-        console.log(`[MANAGER] Provider ${name} is now HEALTHY.`);
+        console.log(`[MANAGER] ✅ Provider ${providerName} is now HEALTHY.`);
       }
       provider.healthy = true;
-    } catch (error) {
-      if (provider.healthy) {
-        console.warn(`[MANAGER] Provider ${name} is now UNHEALTHY.`);
-      }
-      provider.healthy = false;
-    } finally {
-      provider.lastCheck = Date.now();
-    }
-  }
-
-  private _getProviderNamesForModel(modelName: string): string[] {
-    let providerList = this.modelToProvidersMap[modelName];
-
-    if (!providerList) {
-      const sortedKeys = Object.keys(this.modelToProvidersMap)
-        .filter((key) => key !== 'default')
-        .sort((a, b) => b.length - a.length);
-
-      const matchingKey = sortedKeys.find(
-        (key) => modelName.startsWith(key)
-      );
-
-      if (matchingKey) {
-        console.log(
-          `[MANAGER] Partial match found: "${modelName}" will use map for "${matchingKey}".`
+      provider.failureCount = 0;
+    } catch {
+      // Fallback: try a minimal chat completion to verify the provider works
+      try {
+        await this.apiClient.post(
+          '/v1/chat/completions',
+          {
+            model: providerName,
+            messages: [{ role: 'user', content: 'hi' }],
+            max_tokens: 5,
+            stream: false,
+          },
+          { timeout: 12000 }
         );
-        providerList = this.modelToProvidersMap[matchingKey];
+
+        if (!provider.healthy) {
+          console.log(`[MANAGER] ✅ Provider ${providerName} is now HEALTHY (via completion check).`);
+        }
+        provider.healthy = true;
+        provider.failureCount = 0;
+      } catch {
+        provider.failureCount += 1;
+        if (provider.healthy || provider.failureCount === 1) {
+          console.warn(
+            `[MANAGER] ❌ Provider ${providerName} is UNHEALTHY (failures: ${provider.failureCount}).`
+          );
+        }
+        provider.healthy = false;
       }
     }
 
-    if (!providerList) {
-      console.warn(
-        `[MANAGER] Model "${modelName}" not in map, using default providers.`
-      );
-      providerList = this.modelToProvidersMap['default'];
-    }
-
-    return providerList || [];
+    provider.lastCheck = Date.now();
   }
 
+  /**
+   * Returns the provider names mapped to a given model.
+   * Falls back to 'default' if no specific mapping exists.
+   */
+  public getProviderNamesForModel(model: string): string[] {
+    return (
+      this.modelToProvidersMap[model] ||
+      this.modelToProvidersMap['default'] ||
+      []
+    );
+  }
+
+  /**
+   * Returns a specific provider by name.
+   */
   public getProvider(name: string): Provider | undefined {
     return this.providers.get(name);
   }
 
-  public getProviderNamesForModel(modelName: string): string[] {
-    return this._getProviderNamesForModel(modelName);
+  /**
+   * Returns a snapshot of all providers and their status.
+   */
+  public getAllProviders(): Provider[] {
+    return [...this.providers.values()];
   }
 
-  public getHealthyProviderForModel(modelName: string): Provider | undefined {
-    const providerList = this._getProviderNamesForModel(modelName);
-
-    for (const providerName of providerList) {
-      const provider = this.getProvider(providerName);
-      if (provider && provider.healthy) {
-        console.log(
-          `[MANAGER] Found healthy provider "${providerName}" for model "${modelName}".`
-        );
-        return provider;
-      }
-    }
-
-    console.error(
-      `[MANAGER] No healthy provider found for model "${modelName}".`
+  /**
+   * Returns all unique model names that this router supports.
+   */
+  public getSupportedModels(): string[] {
+    return Object.keys(this.modelToProvidersMap).filter(
+      (m) => m !== 'default'
     );
-    return undefined;
   }
 
-  public reportFailure(name: string) {
+  /**
+   * Marks a provider as unhealthy immediately (called on request failure).
+   */
+  public markUnhealthy(name: string): void {
     const provider = this.providers.get(name);
     if (provider) {
-      console.warn(
-        `[MANAGER] Reporting immediate failure for ${name}. Marking as UNHEALTHY.`
-      );
       provider.healthy = false;
-      provider.lastCheck = Date.now();
+      provider.failureCount += 1;
+      console.warn(`[MANAGER] Provider ${name} marked unhealthy after request failure.`);
     }
   }
 }
 
+// Singleton instance shared across the application
 export const providerManager = new ProviderManager();
